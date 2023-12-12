@@ -1,234 +1,145 @@
+'use strict'
 
+const PI2 = Math.PI * 2
+let random = (min, max) => Math.random() * (max - min + 1) + min | 0
 
-var screenWidth = window.innerWidth;
-var screenHeight = window.innerHeight;
-var controller;
+class Birthday {
+  constructor() {
+    this.resize()
 
-var minVx = -10;
-var deltaVx = 20;
-var minVy = 25
-var deltaVy = 15;
-var minParticleV = 5;
-var deltaParticleV = 5;
+    // create a lovely place to store the firework
+    this.fireworks = []
+    this.counter = 0
 
-var gravity = 1;
+  }
+  resize() {
+    this.width = canvas.width = window.innerWidth
+    let center = this.width / 2 | 0
+    this.spawnA = center - center / 4 | 0
+    this.spawnB = center + center / 4 | 0
+    
+    this.height = canvas.height = window.innerHeight
+    this.spawnC = this.height * .1
+    this.spawnD = this.height * .5
+    
+  }
+  onClick(evt) {
+     let x = evt.clientX || evt.touches && evt.touches[0].pageX
+     let y = evt.clientY || evt.touches && evt.touches[0].pageY
+     
+     let count = random(3,5)
+     for(let i = 0; i < count; i++) this.fireworks.push(new Firework(
+        random(this.spawnA, this.spawnB),
+        this.height,
+        x,
+        y,
+        random(300, 450),
+        random(30, 110)))
+          
+     this.counter = -30
+     
+  }
+  update() {
+    ctx.globalCompositeOperation = 'hard-light'
+    ctx.fillStyle = 'rgba(20,20,20,0.15)'
+    ctx.fillRect(0, 0, this.width, this.height)
 
-var explosionRadius = 500;
-var bombRadius = 3;
-var explodingDuration = 10;
-var explosionDividerFactor = 5; // I couldn't find a better name. Got any?
+    ctx.globalCompositeOperation = 'lighter'
+    for (let firework of this.fireworks) firework.update()
 
-var nBombs = 1; // initial
-var percentChanceNewBomb = 2;
+    // if enough time passed... create new new firework
+    if (++this.counter === 15) {
+      this.fireworks.push(new Firework(
+        random(this.spawnA, this.spawnB),
+        this.height,
+        random(0, this.width),
+        random(this.spawnC, this.spawnD),
+        random(300, 450),
+        random(30, 110)))
+      this.counter = 0
+    }
 
-function Color(min) {
-	this.style = 'hsla(' + (Math.random() * 255) + ', 100%, 50%, 1.0)';
-};
+    // remove the dead fireworks
+    if (this.fireworks.length > 1000) this.fireworks = this.fireworks.filter(firework => !firework.dead)
 
-function colorValue(min) {
-	return Math.floor(Math.random() * (255 - min) + min);
+  }
 }
 
-function createColorStyle(r, g, b) {
-	return 'rgba(' + r + ',' + g + ',' + b + ', 0.8)';
+class Firework {
+  constructor(x, y, targetX, targetY, shade, offsprings) {
+    this.dead = false
+    this.offsprings = offsprings
+
+    this.x = x
+    this.y = y
+    this.targetX = targetX
+    this.targetY = targetY
+
+    this.shade = shade
+    this.history = []
+  }
+  update() {
+    if (this.dead) return;
+
+    let xDiff = this.targetX - this.x
+    let yDiff = this.targetY - this.y
+    if (Math.abs(xDiff) > 3 || Math.abs(yDiff) > 3) { // is still moving
+      this.x += xDiff / 20
+      this.y += yDiff / 20
+
+      this.history.push({
+        x: this.x,
+        y: this.y
+      })
+
+      if (this.history.length > 20) this.history.shift()
+
+    } else {
+      if (this.offsprings && !this.madeChilds) {
+        
+        let babies = this.offsprings / 2;
+        for (let i = 0; i < babies; i++) {
+          let targetX = this.x + this.offsprings * Math.cos(PI2 * i / babies) | 0
+          let targetY = this.y + this.offsprings * Math.sin(PI2 * i / babies) | 0
+
+          birthday.fireworks.push(new Firework(this.x, this.y, targetX, targetY, this.shade, 0))
+
+        }
+
+      }
+      this.madeChilds = true
+      this.history.shift()
+    }
+    
+    if (this.history.length === 0) this.dead = true
+    else if (this.offsprings) { 
+        for (let i = 0; this.history.length > i; i++) {
+          let point = this.history[i]
+          ctx.beginPath()
+          ctx.fillStyle = 'hsl(' + this.shade + ',100%,' + i + '%)'
+          ctx.arc(point.x, point.y, 1, 0, PI2, false)
+          ctx.fill()
+        } 
+      } else {
+      ctx.beginPath()
+      ctx.fillStyle = 'hsl(' + this.shade + ',100%,50%)'
+      ctx.arc(this.x, this.y, 1, 0, PI2, false)
+      ctx.fill()
+    }
+
+  }
 }
 
-// A Bomb. Or firework.
-function Bomb() {
-	var self = this;
-	self.radius = bombRadius;
-	self.previousRadius = bombRadius;
-	self.explodingDuration = explodingDuration;
-	self.hasExploded = false;
-	self.alive = true;
-	self.color = new Color(160);
+let canvas = document.getElementById('birthday')
+let ctx = canvas.getContext('2d')
 
-	self.px = (window.innerWidth / 4) + (Math.random() * window.innerWidth / 2);
-	self.py = window.innerHeight;
-	self.vx = minVx + Math.random() * deltaVx;
-	self.vy = (minVy + Math.random() * deltaVy) * -1;
+let birthday = new Birthday
+window.onresize = () => birthday.resize()
+document.onclick = evt => birthday.onClick(evt)
+document.ontouchstart = evt => birthday.onClick(evt)
 
-	self.duration = 
-		self.update = function(particlesVector) {
-		if (self.hasExploded) {
-			var deltaRadius = explosionRadius - self.radius;
-			self.previousRadius = self.radius;
-			self.radius += deltaRadius / explosionDividerFactor;
-			self.explodingDuration--;
-			if (self.explodingDuration == 0) {
-				self.alive = false;
-			}
-		} else {
-			self.vx += 0;
-			self.vy += gravity;
-			if (self.vy >= 0) { // invertion point
-				self.explode(particlesVector);
-			}
-			self.px += self.vx;
-			self.py += self.vy;
-		}
-	};
+;(function update() {
+  requestAnimationFrame(update)
+  birthday.update()
 
-	self.draw = function(ctx) {
-		ctx.beginPath();
-		ctx.arc(self.px, self.py, self.previousRadius, 0, Math.PI * 2, false);
-		if (self.hasExploded) {
-		} else {
-			ctx.fillStyle = self.color.style;
-			ctx.lineWidth = 1;
-			ctx.fill();
-		}
-	};
-
-	self.explode = function(particlesVector) {
-		self.hasExploded = true;
-		var e = 3 + Math.floor(Math.random() * 3);
-		for(var j = 0; j < e; j++) {
-			var n = 10 + Math.floor(Math.random() * 21); // 10 - 30
-			var speed = minParticleV + Math.random() * deltaParticleV;
-			var deltaAngle = 2 * Math.PI / n;
-			var initialAngle = Math.random() * deltaAngle;
-			for(var i = 0; i < n; i++) {
-				particlesVector.push(new Particle(self,  i * deltaAngle + initialAngle, speed));
-			}
-		}
-	};
-
-}
-
-function Particle(parent, angle, speed) {
-	var self = this;
-	self.px = parent.px;
-	self.py = parent.py;
-	self.vx = Math.cos(angle) * speed;
-	self.vy = Math.sin(angle) * speed;
-	self.color = parent.color;
-	self.duration = 40 + Math.floor(Math.random() * 20);
-	self.alive = true;
-
-	self.update = function(){
-		self.vx += 0;
-		self.vy += gravity / 10;
-
-		self.px += self.vx;
-		self.py += self.vy;
-		self.radius = 3;
-
-		self.duration--;
-		if(self.duration <= 0){
-			self.alive = false;
-		}
-	};
-
-	self.draw = function(ctx) {
-		ctx.beginPath();
-		ctx.arc(self.px, self.py, self.radius, 0, Math.PI * 2, false);
-		ctx.fillStyle = self.color.style;
-		ctx.lineWidth = 1;
-		ctx.fill();
-	};
-}
-
-function Controller() {
-	var self = this;
-	self.canvas = document.getElementById("screen");
-	self.canvas.width = screenWidth;
-	self.canvas.height = screenHeight;
-	self.ctx = self.canvas.getContext('2d');
-	
-	function setSpeedParams() {
-		var heightReached = 0;
-		var vy = 0;
-		while (heightReached < screenHeight && vy >= 0){
-			vy += gravity;
-			heightReached += vy;
-		}
-		minVy = vy / 2;
-		deltaVy = vy - minVy;
-		vx = (1 / 4) * screenWidth / (vy / 2);
-		minVx = -vx;
-		deltaVx = 2*vx;
-	};
-	
-	self.resize = function() {
-		screenWidth = window.innerWidth;
-		screenHeight = window.innerHeight;
-		self.canvas.width = screenWidth;
-		self.canvas.height = screenHeight;
-		setSpeedParams();
-	};
-	
-	self.resize();
-	window.onresize = self.resize;
-	self.init = function(){
-		self.readyBombs = [];
-		self.explodedBombs = [];
-		self.particles = [];
-		for(var i = 0; i < nBombs; i++){
-			self.readyBombs.push(new Bomb());
-		}
-	}
-	
-	self.update = function(){
-		var aliveBombs = [];
-		while(self.explodedBombs.length > 0){
-			var bomb = self.explodedBombs.shift();
-			bomb.update();
-			if (bomb.alive) {
-				aliveBombs.push(bomb);
-			}
-		}
-		self.explodedBombs = aliveBombs;
-		var notExplodedBombs = [];
-		while (self.readyBombs.length > 0) {
-			var bomb = self.readyBombs.shift();
-			bomb.update(self.particles);
-			if (bomb.hasExploded){
-				self.explodedBombs.push(bomb);
-			} else {
-				notExplodedBombs.push(bomb);
-			}
-		}
-		self.readyBombs = notExplodedBombs;
-		var aliveParticles = [];
-		while (self.particles.length > 0) {
-			var particle = self.particles.shift();
-			particle.update();
-			if (particle.alive){
-				aliveParticles.push(particle);
-			}
-		}
-		self.particles = aliveParticles;
-	}
-
-	self.draw = function() {
-		self.ctx.beginPath();
-		self.ctx.fillStyle='rgba(0, 0, 0, 0.1)'; // Ghostly effect
-		self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
-		self.ctx.globalCompositeOperation = 'lighter';
-		for (var i = 0; i < self.readyBombs.length; i++){
-			self.readyBombs[i].draw(self.ctx);
-		}
-		for (var i = 0; i < self.explodedBombs.length; i++){
-			self.explodedBombs[i].draw(self.ctx);
-		}
-		for (var i = 0; i < self.particles.length; i++){
-			self.particles[i].draw(self.ctx);
-		}
-		self.ctx.globalCompositeOperation = 'source-over';
-	}
-	
-	self.animation = function() {
-		self.update();
-		self.draw();
-		if (Math.random() * 100 < percentChanceNewBomb) {
-			self.readyBombs.push(new Bomb());
-		}
-		requestAnimationFrame(self.animation);
-	}
-}
-
-var controller = new Controller();
-controller.init();
-requestAnimationFrame(controller.animation);
-
+}())
