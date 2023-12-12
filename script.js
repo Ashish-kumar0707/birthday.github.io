@@ -1,146 +1,234 @@
-var time = new Date().getHours();
-var messageText;
-var noon = 12;
-var evening = 18; // 6PM
-var wakeupTime = 9; // 9AM
-var lunchTime = 12; // 12PM
-var partyTime = 17; // 5PM
-var napTime = lunchTime + 2; // 2PM
-var message = document.getElementById('timeEvent');
-var lolcat = document.getElementById('lolcat');
-var image = "https://s3.amazonaws.com/media.skillcrush.com/skillcrush/wp-content/uploads/2016/08/wakeUpTime.jpg";
-var image = "https://s3.amazonaws.com/media.skillcrush.com/skillcrush/wp-content/uploads/2016/09/cat3.jpg";
 
-var partyTimeButton = document.getElementById("partyTimeButton");
-var napTimeSelector = document.getElementById("napTimeSelector");
-var lunchTimeSelector = document.getElementById("lunchTimeSelector");
-var wakeUpTimeSelector = document.getElementById("wakeUpTimeSelector");
-var lunchEvent = function() {
-    lunchTime = lunchTimeSelector.value;
+
+var screenWidth = window.innerWidth;
+var screenHeight = window.innerHeight;
+var controller;
+
+var minVx = -10;
+var deltaVx = 20;
+var minVy = 25
+var deltaVy = 15;
+var minParticleV = 5;
+var deltaParticleV = 5;
+
+var gravity = 1;
+
+var explosionRadius = 500;
+var bombRadius = 3;
+var explodingDuration = 10;
+var explosionDividerFactor = 5; // I couldn't find a better name. Got any?
+
+var nBombs = 1; // initial
+var percentChanceNewBomb = 2;
+
+function Color(min) {
+	this.style = 'hsla(' + (Math.random() * 255) + ', 100%, 50%, 1.0)';
 };
 
-var wakeUpEvent = function() {
-    wakeupTime = wakeUpTimeSelector.value;
-};
-
-var napEvent = function() {
-    napTime = napTimeSelector.value;
-};
-var isPartyTime = false;
-var partyEvent = function() {
-
-   if (isPartyTime === false) {
-      isPartyTime = true;
-      time = partyTime;
-      partyTimeButton.innerText = "PARTY TIME!";
-      partyTimeButton.style.backgroundColor = "#222";
-   } else {
-      isPartyTime = false;
-      time = new Date().getHours();
-      partyTimeButton.innerText = "PARTY OVER";
-      partyTimeButton.style.backgroundColor = "#0A8DAB";
-   }
-};
-
-partyTimeButton.addEventListener('click', partyEvent);
-if (time == partyTime) {
-    messageText = "IZ PARTEE TIME!!";
-    image = "https://s3.amazonaws.com/media.skillcrush.com/skillcrush/wp-content/uploads/2016/08/partyTime.jpg";
-} else if (time == napTime) {
-    messageText = "IZ NAP TIME...";
-} else if (time == lunchTime) {
-    messageText = "IZ NOM NOM NOM TIME!!";
-} else if (time == wakeupTime) {
-    messageText = "IZ TIME TO GETTUP.";
-} else if (time < noon) {
-    messageText = "Good morning!";
-} else if (time > evening) {
-    messageText = "Heloo there! is it new yet?!";
-} else {
-    messageText = "Good afternoon!";
+function colorValue(min) {
+	return Math.floor(Math.random() * (255 - min) + min);
 }
-message.innerText = messageText;
-lolcat.src = image;
-var showCurrentTime = function()
-{
-    // display the string on the webpage
-    var clock = document.getElementById('clock');
 
-    var currentTime = new Date();
+function createColorStyle(r, g, b) {
+	return 'rgba(' + r + ',' + g + ',' + b + ', 0.8)';
+}
 
-    var hours = currentTime.getHours();
-    var minutes = currentTime.getMinutes();
-    var seconds = currentTime.getSeconds();
-    var meridian = "AM";
+// A Bomb. Or firework.
+function Bomb() {
+	var self = this;
+	self.radius = bombRadius;
+	self.previousRadius = bombRadius;
+	self.explodingDuration = explodingDuration;
+	self.hasExploded = false;
+	self.alive = true;
+	self.color = new Color(160);
 
-    // Set hours
-    if (hours >= noon)
-    {
-        meridian = "PM";
-    }
-    if (hours > noon)
-    {
-        hours = hours - 12;
-    }
+	self.px = (window.innerWidth / 4) + (Math.random() * window.innerWidth / 2);
+	self.py = window.innerHeight;
+	self.vx = minVx + Math.random() * deltaVx;
+	self.vy = (minVy + Math.random() * deltaVy) * -1;
 
-    // Set Minutes
-    if (minutes < 10)
-    {
-        minutes = "0" + minutes;
-    }
+	self.duration = 
+		self.update = function(particlesVector) {
+		if (self.hasExploded) {
+			var deltaRadius = explosionRadius - self.radius;
+			self.previousRadius = self.radius;
+			self.radius += deltaRadius / explosionDividerFactor;
+			self.explodingDuration--;
+			if (self.explodingDuration == 0) {
+				self.alive = false;
+			}
+		} else {
+			self.vx += 0;
+			self.vy += gravity;
+			if (self.vy >= 0) { // invertion point
+				self.explode(particlesVector);
+			}
+			self.px += self.vx;
+			self.py += self.vy;
+		}
+	};
 
-    // Set Seconds
-    if (seconds < 10)
-    {
-        seconds = "0" + seconds;
-    }
+	self.draw = function(ctx) {
+		ctx.beginPath();
+		ctx.arc(self.px, self.py, self.previousRadius, 0, Math.PI * 2, false);
+		if (self.hasExploded) {
+		} else {
+			ctx.fillStyle = self.color.style;
+			ctx.lineWidth = 1;
+			ctx.fill();
+		}
+	};
 
-    // put together the string that displays the time
-    var clockTime = hours + ":" + minutes + ":" + seconds + " " + meridian + "!";
+	self.explode = function(particlesVector) {
+		self.hasExploded = true;
+		var e = 3 + Math.floor(Math.random() * 3);
+		for(var j = 0; j < e; j++) {
+			var n = 10 + Math.floor(Math.random() * 21); // 10 - 30
+			var speed = minParticleV + Math.random() * deltaParticleV;
+			var deltaAngle = 2 * Math.PI / n;
+			var initialAngle = Math.random() * deltaAngle;
+			for(var i = 0; i < n; i++) {
+				particlesVector.push(new Particle(self,  i * deltaAngle + initialAngle, speed));
+			}
+		}
+	};
 
-    clock.innerText = clockTime;
-};
-var updateClock = function()
-{   var clock = document.getElementById('clock');
+}
 
-    var currentTime = new Date();
+function Particle(parent, angle, speed) {
+	var self = this;
+	self.px = parent.px;
+	self.py = parent.py;
+	self.vx = Math.cos(angle) * speed;
+	self.vy = Math.sin(angle) * speed;
+	self.color = parent.color;
+	self.duration = 40 + Math.floor(Math.random() * 20);
+	self.alive = true;
 
-    var hours = currentTime.getHours();
-    var minutes = currentTime.getMinutes();
-    var seconds = currentTime.getSeconds();
-    var meridian = "AM";
+	self.update = function(){
+		self.vx += 0;
+		self.vy += gravity / 10;
 
-    // Set hours
-    if (hours >= noon)
-    {
-        meridian = "PM";
-    }
-    if (hours > noon)
-    {
-        hours = hours - 12;
-    }
+		self.px += self.vx;
+		self.py += self.vy;
+		self.radius = 3;
 
-    // Set Minutes
-    if (minutes < 10)
-    {
-        minutes = "0" + minutes;
-    }
+		self.duration--;
+		if(self.duration <= 0){
+			self.alive = false;
+		}
+	};
 
-    // Set Seconds
-    if (seconds < 10)
-    {
-        seconds = "0" + seconds;
-    }
+	self.draw = function(ctx) {
+		ctx.beginPath();
+		ctx.arc(self.px, self.py, self.radius, 0, Math.PI * 2, false);
+		ctx.fillStyle = self.color.style;
+		ctx.lineWidth = 1;
+		ctx.fill();
+	};
+}
 
-    // put together the string that displays the time
-    var clockTime = hours + ":" + minutes + ":" + seconds + " " + meridian + "!";
+function Controller() {
+	var self = this;
+	self.canvas = document.getElementById("screen");
+	self.canvas.width = screenWidth;
+	self.canvas.height = screenHeight;
+	self.ctx = self.canvas.getContext('2d');
+	
+	function setSpeedParams() {
+		var heightReached = 0;
+		var vy = 0;
+		while (heightReached < screenHeight && vy >= 0){
+			vy += gravity;
+			heightReached += vy;
+		}
+		minVy = vy / 2;
+		deltaVy = vy - minVy;
+		vx = (1 / 4) * screenWidth / (vy / 2);
+		minVx = -vx;
+		deltaVx = 2*vx;
+	};
+	
+	self.resize = function() {
+		screenWidth = window.innerWidth;
+		screenHeight = window.innerHeight;
+		self.canvas.width = screenWidth;
+		self.canvas.height = screenHeight;
+		setSpeedParams();
+	};
+	
+	self.resize();
+	window.onresize = self.resize;
+	self.init = function(){
+		self.readyBombs = [];
+		self.explodedBombs = [];
+		self.particles = [];
+		for(var i = 0; i < nBombs; i++){
+			self.readyBombs.push(new Bomb());
+		}
+	}
+	
+	self.update = function(){
+		var aliveBombs = [];
+		while(self.explodedBombs.length > 0){
+			var bomb = self.explodedBombs.shift();
+			bomb.update();
+			if (bomb.alive) {
+				aliveBombs.push(bomb);
+			}
+		}
+		self.explodedBombs = aliveBombs;
+		var notExplodedBombs = [];
+		while (self.readyBombs.length > 0) {
+			var bomb = self.readyBombs.shift();
+			bomb.update(self.particles);
+			if (bomb.hasExploded){
+				self.explodedBombs.push(bomb);
+			} else {
+				notExplodedBombs.push(bomb);
+			}
+		}
+		self.readyBombs = notExplodedBombs;
+		var aliveParticles = [];
+		while (self.particles.length > 0) {
+			var particle = self.particles.shift();
+			particle.update();
+			if (particle.alive){
+				aliveParticles.push(particle);
+			}
+		}
+		self.particles = aliveParticles;
+	}
 
-    clock.innerText = clockTime;
-};
-showCurrentTime();
-updateClock();
-var oneSecond = 1000;
-setInterval( updateClock, oneSecond);
-napTimeSelector.addEventListener('change', napEvent);
-lunchTimeSelector.addEventListener('change', lunchEvent);
-wakeUpTimeSelector.addEventListener('change', wakeUpEvent);
+	self.draw = function() {
+		self.ctx.beginPath();
+		self.ctx.fillStyle='rgba(0, 0, 0, 0.1)'; // Ghostly effect
+		self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
+		self.ctx.globalCompositeOperation = 'lighter';
+		for (var i = 0; i < self.readyBombs.length; i++){
+			self.readyBombs[i].draw(self.ctx);
+		}
+		for (var i = 0; i < self.explodedBombs.length; i++){
+			self.explodedBombs[i].draw(self.ctx);
+		}
+		for (var i = 0; i < self.particles.length; i++){
+			self.particles[i].draw(self.ctx);
+		}
+		self.ctx.globalCompositeOperation = 'source-over';
+	}
+	
+	self.animation = function() {
+		self.update();
+		self.draw();
+		if (Math.random() * 100 < percentChanceNewBomb) {
+			self.readyBombs.push(new Bomb());
+		}
+		requestAnimationFrame(self.animation);
+	}
+}
+
+var controller = new Controller();
+controller.init();
+requestAnimationFrame(controller.animation);
+
